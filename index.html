@@ -64,25 +64,50 @@ const WPN={
 };
 let player=null;
 
+let stats={guns:0,rolls:0,heals:0,crits:0};
+let lastKillSrc="other",curShotSrc=null;
+let comboN=0,comboT=0,caffeineT=0,skillFlash=0;
+const GUNSET=["pistol","shotgun","smg","stapler","revolver","card","homing","pen"];
+const SKILLS=[
+ {id:"caffeine",name:"카페인 오버도즈",short:"카",stat:"heals",need:5,cd:22,desc:"6초간 이속·연사 대폭 상승"},
+ {id:"storm",name:"서류 폭풍",short:"서",stat:"rolls",need:25,cd:11,desc:"전방향 서류 탄환 + 순간 무적"},
+ {id:"sign",name:"최종 서명",short:"사",stat:"crits",need:10,cd:15,desc:"강력한 관통 사인 빔"}
+];
+let skillState={};
+let floats=[];
+
 const INTRO=[
  ["도혁","베넷 컴퍼니 8년차. 직급 없는 전업킬러."],
- ["도혁","회사가 내 아내를 지웠다. 나는 도망쳤다."],
- ["도혁","지하주차장, 출구 앞에서... 돌아섰다."],
- ["도혁","오늘, 사장님께 퇴사계를 직접 전달한다."]
+ ["도혁","회사가 준 건 많았다. 이름, 목적지, 그리고 총."],
+ ["도혁","아내는 연구소에서 장부를 봤다. 나는 그걸 몰랐다."],
+ ["도혁","어느 날 그녀는 '퇴근'했다. 회사가 처리한 퇴근."],
+ ["도혁","나는 도망쳤다. 지하 출구 앞에서... 돌아섰다."],
+ ["도혁","오늘 CEO에게 두 가지를 전달한다."],
+ ["도혁","사표 한 장. 그리고 영장 한 장."]
 ];
 const EXIT0=[
  ["도혁","지하에서 옥상까지. 아홉 개의 층."],
  ["도혁","전 동료들이 날 막겠지. 좋아."],
  ["도혁","엘리베이터, 위로 올려줘."]
 ];
+const MID_STORY=[
+ ["도혁","연구소 문호에 적혀 있었다. N-13."],
+ ["도혁","아내가 마지막으로 만진 프로젝트. 매출의 3할이 지워진 장부."],
+ ["도혁","그걸 발견한 게 그녀였다. 그래서 '퇴근'당했다."],
+ ["CEO 강만재","(무전) 도혁. 감정은 성과의 적이야. 가르쳤을 텐데."],
+ ["도혁","...이제 와서 조언은 됐습니다."]
+];
 const BOSS_INTRO=[
  ["CEO 강만재","왔냐 도혁. 퇴근은 참으라고 했을 텐데."],
- ["도혁","사표예요. 받아주시죠."],
+ ["도혁","N-13 장부. 당신이 지운 이유를 가져왔어요."],
+ ["CEO 강만재","장부 한 권에 이 회사가 무너지냐? 그래, 그래서 네 아내를—"],
+ ["도혁","사표예요. 그리고 검찰 송치장."],
  ["CEO 강만재","네 연봉은 방탄조끼로 주겠다. 들어와 봐."]
 ];
 const WIN_LINES=[
  ["CEO 강만재","하하... 이게... 퇴사란 거구나."],
- ["도혁","수고하셨습니다, 사장님."],
+ ["도혁","수고하셨습니다, 사장님. 검문소까지 걸어가세요."],
+ ["도혁","장부는 이미 검찰에 갔다. 늦었어요."],
  ["도혁","나는 이제... 진짜로 퇴근한다."]
 ];
 
@@ -776,6 +801,8 @@ function sfx(n){
  case"clack":noiseHit(.05,.13,1800,2);break;
  case"home":osc("triangle",620,940,.09,.1);break;
  case"pen":osc("sawtooth",1300,180,.2,.24);noiseHit(.12,.16,1600);break;
+ case"perf":osc("triangle",1100,1700,.1,.12);break;
+ case"skill":osc("square",500,900,.12,.14);osc("square",750,1350,.12,.12,.06);break;
  }
 }
 
@@ -827,6 +854,11 @@ function bindInput(){
    if(e.code==="KeyR"){
     if(state==="over")retryFloor();
     else if(state==="win")resetRun(true);
+   }
+   if(state==="play"){
+    if(e.code==="Digit1")trySkill(0);
+    if(e.code==="Digit2")trySkill(1);
+    if(e.code==="Digit3")trySkill(2);
    }
    if(state==="title"&&(e.code==="Enter"||e.code==="Space"))startRun();
   }
@@ -913,6 +945,11 @@ function resetGear(){
  wpn={pistol:true,shotgun:false,smg:false,stapler:false,revolver:false,case:false,ext:false,chair:false,card:true,toner:false,homing:false,pen:false};
  ammo={shotgun:0,smg:0,stapler:0,revolver:0,toner:0,homing:0,pen:0};curWpn="pistol";
  kills=0;deaths=0;playTime=0;
+ stats={guns:0,rolls:0,heals:0,crits:0};
+ skillState={};
+ for(const S of SKILLS)skillState[S.id]={u:false,cd:0};
+ caffeineT=0;comboN=0;comboT=0;
+ floats=[];
 }
 function beginFloor(i,retry){
  const keep=player?player.hp:100;
@@ -932,6 +969,10 @@ function gotoNextFloor(){
  if(floorIdx===0){
   startTrans(function(){
    showDialog(EXIT0,function(){startTrans(function(){beginFloor(1);},FLOORS[1].name+" · "+FLOORS[1].sub);});
+  },label);
+ }else if(floorIdx===4){
+  startTrans(function(){
+   showDialog(MID_STORY,function(){startTrans(function(){beginFloor(5);},label);});
   },label);
  }else{
   startTrans(function(){beginFloor(floorIdx+1);},label);
@@ -959,7 +1000,8 @@ function alertNear(x,y,r){
 function shoot(x,y,ang,spec,from,color,size,pierceGlass){
  bullets.push({x:x,y:y,vx:Math.cos(ang)*spec.spd,vy:Math.sin(ang)*spec.spd,
   dmg:spec.dmg,from:from,life:spec.life||1.1,size:size||2,
-  color:color||(from==="p"?"#ffe9a8":"#ff6b57"),crit:spec.crit||false,pierce:pierceGlass||false});
+  color:color||(from==="p"?"#ffe9a8":"#ff6b57"),crit:spec.crit||false,pierce:pierceGlass||false,
+  src:curShotSrc});
 }
 function damagePane(tx,ty){
  const k=ty*MW+tx;
@@ -971,6 +1013,7 @@ function damagePane(tx,ty){
 }
 function doFire(){
  const w=curWpn,spec=WPN[w];
+ curShotSrc=w;
  if(w==="ext"){
   if(player.pressure<=1){player.fireCd=.1;return;}
   player.fireCd=spec.rate;
@@ -992,6 +1035,7 @@ function doFire(){
  if(w==="case"){
   player.swing=.16;sfx("swing");
   const a=player.aim;
+  lastKillSrc="melee";
   for(const e of enemies){
    if(e.dead||(e.type==="ceo"&&!e.alert))continue;
    const d=Math.hypot(e.x-player.x,e.y-player.y);
@@ -1132,6 +1176,9 @@ function damage(e,dmg,srcAng,isBullet){
 }
 function kill(e){
  e.dead=true;kills++;
+ if(lastKillSrc==="gun")stats.guns++;
+ comboN++;comboT=3;
+ if(comboN>=3)addFloat(e.x,e.y-24,"x"+comboN,"#ffd166");
  stampCorpse(e);
  hitStop=Math.max(hitStop,e.boss?.07:.024);
  whiteFlash=Math.max(whiteFlash,e.boss?.14:.05);
@@ -1181,6 +1228,7 @@ let lastDt=0.016;
 function dtSafe(){return lastDt;}
 
 function explode(x,y,r,dmg,hurtEnemies){
+ lastKillSrc="other";
  sfx("boom");shake.t=.3;shake.m=4;hitStop=Math.max(hitStop,.02);
  flashes.push({x:x,y:y,t:.24});
  parts.push({x:x,y:y,vx:0,vy:0,g:0,life:.32,col:"#ffb347",sz:r*.6,ring:true});
@@ -1634,10 +1682,12 @@ function updateBullets(dt){
     break;
    }
    if(b.from==="p"){
+    lastKillSrc=(GUNSET.indexOf(b.src)>=0)?"gun":"other";
     for(const e of enemies){
      if(e.dead)continue;
      if(e.type==="ceo"&&!e.alert)continue;
      if(Math.hypot(e.x-b.x,(e.y-8)-b.y)<e.r+b.size+1){
+      if(b.crit)stats.crits++;
       if(b.pierceN!==undefined){
        if(b.hitIds[e.id])continue;
        b.hitIds[e.id]=1;
@@ -1658,9 +1708,13 @@ function updateBullets(dt){
      }
     }
    }else{
-    if(player.roll<=0&&player.inv<=0&&Math.hypot(player.x-b.x,(player.y-8)-b.y)<player.r+b.size+1){
+    const pd2=Math.hypot(player.x-b.x,(player.y-8)-b.y);
+    if(player.roll<=0&&player.inv<=0&&pd2<player.r+b.size+1){
      hurtPlayer(b.dmg,Math.atan2(b.vy,b.vx));
      dead=true;
+    }else if(player.roll>0&&pd2<26&&!b.pd){
+     b.pd=1;
+     perfectDodge(b);
     }
    }
   }
@@ -1693,8 +1747,8 @@ function applyPickup(p){
   hasKey=true;sfx("key");
   pushToast("사원증 획득 - 엘리베이터 개방","#f4c542");
  }else if(p.kind==="med"){
-  player.hp=Math.min(player.maxhp,player.hp+30);sfx("heal");
-  pushToast("+30 HP","#3aa66a");
+  player.hp=Math.min(player.maxhp,player.hp+30);stats.heals++;sfx("heal");
+  pushToast("+30 HP","#37d67a");
  }else if(p.kind==="ammo"){
   ammo.shotgun+=6;ammo.smg+=24;ammo.stapler+=4;ammo.revolver+=2;ammo.toner+=1;ammo.homing+=2;ammo.pen+=1;sfx("pick");
  }else if(p.kind==="wpn"){
@@ -1745,19 +1799,23 @@ function updatePlayerCtl(dt){
    const a=len>0?Math.atan2(iy,ix):player.aim;
    player.roll=.2;player.rollCd=.7;
    player.rx=Math.cos(a);player.ry=Math.sin(a);
+   stats.rolls++;
    sfx("dash");
   }
  }
  if(player.roll>0){
   player.roll-=dt;
-  moveEnt(player,player.rx*275*dt,player.ry*275*dt,false);
+  moveEnt(player,player.rx*275*(caffeineT>0?1.15:1)*dt,player.ry*275*(caffeineT>0?1.15:1)*dt,false);
   if(Math.random()<.5)
    parts.push({x:player.x,y:player.y-4,vx:0,vy:0,g:0,life:.18,col:"#3a3f4d",sz:3});
   player.moving=false;
  }else{
-  moveEnt(player,ix*player.speed*dt,iy*player.speed*dt,false);
+  const spd=player.speed*(caffeineT>0?1.45:1);
+  moveEnt(player,ix*spd*dt,iy*spd*dt,false);
   player.moving=len>0;
  }
+ if(caffeineT>0&&Math.random()<dt*14)
+  parts.push({x:player.x+(Math.random()-.5)*10,y:player.y-20,vx:0,vy:-25,g:0,life:.5,col:"#ffd166",sz:1});
  if(player.moving)player.bob+=dt*11;else player.bob=0;
  if(curWpn!=="ext")player.pressure=Math.min(100,player.pressure+14*dt);
  if(player.pend.length){
@@ -1776,13 +1834,72 @@ function updatePlayerCtl(dt){
   interactPressed=false;
   for(const v of vendList){
    if(!v.used&&Math.hypot(v.x-player.x,v.y-player.y)<22){
-    v.used=true;
-    player.hp=Math.min(player.maxhp,player.hp+40);
-    sfx("vend");
+     v.used=true;
+     player.hp=Math.min(player.maxhp,player.hp+40);
+     stats.heals++;
+     sfx("vend");
     pushToast("블랙커피 +40 HP","#57c8e8");
     break;
    }
   }
+ }
+}
+
+function addFloat(x,y,txt,col){floats.push({x:x,y:y,txt:txt,col:col||"#ffffff",t:.9});}
+function perfectDodge(b){
+ player.rollCd=Math.max(0,player.rollCd-.45);
+ parts.push({x:b.x,y:b.y,vx:0,vy:0,g:0,life:.22,col:"#ffffff",sz:10,ring:true});
+ sfx("perf");
+ addFloat(player.x,player.y-26,"PERFECT","#4dd7fe");
+}
+function checkUnlocks(){
+ for(let i=0;i<SKILLS.length;i++){
+  const S=SKILLS[i],st=skillState[S.id];
+  if(st&&!st.u&&stats[S.stat]>=S.need){
+   st.u=true;skillFlash=1;
+   pushToast("스킬 해금 ["+(i+1)+"키] "+S.name+" — "+S.desc,"#ffd166");
+   sfx("key");
+  }
+ }
+}
+function trySkill(i){
+ const S=SKILLS[i];if(!S)return;
+ const st=skillState[S.id];
+ if(!st)return;
+ if(!st.u){pushToast("미해금 — "+S.desc+" ("+Math.min(stats[S.stat],S.need)+"/"+S.need+")","#9aa3b2");sfx("ui");return;}
+ if(st.cd>0){sfx("ui");return;}
+ st.cd=S.cd;
+ skillFlash=1;
+ if(S.id==="caffeine"){
+  caffeineT=6;
+  sfx("skill");
+  pushToast("카페인 오버도즈!","#ffd166");
+ }else if(S.id==="storm"){
+  lastKillSrc="other";
+  curShotSrc="card";
+  for(let k=0;k<14;k++)
+   shoot(player.x,player.y-12,k/14*Math.PI*2,{dmg:10,spd:230},"p","#f5f6fa",2);
+  player.inv=Math.max(player.inv,.35);
+  shake.t=.12;shake.m=2;
+  sfx("swing");
+  pushToast("서류 폭풍!","#4dd7fe");
+ }else{
+  lastKillSrc="gun";
+  const ex0=player.x,ey0=player.y-12;
+  const ep2=rayEnd(ex0,ey0,player.aim,320);
+  beams.push({x0:ex0,y0:ey0,x1:ep2.x,y1:ep2.y,t:.16});
+  flashes.push({x:ep2.x,y:ep2.y,t:.22});
+  const vx2=ep2.x-ex0,vy2=ep2.y-ey0,L2=vx2*vx2+vy2*vy2||1;
+  for(const e of enemies){
+   if(e.dead||(e.type==="ceo"&&!e.alert))continue;
+   let tt=((e.x-ex0)*vx2+((e.y-8)-ey0)*vy2)/L2;
+   tt=clamp(tt,0,1);
+   if(Math.hypot(e.x-(ex0+vx2*tt),(e.y-8)-(ey0+vy2*tt))<e.r+6)
+    damage(e,55,Math.atan2(vy2,vx2),true);
+  }
+  shake.t=.14;shake.m=2;
+  sfx("pen");
+  pushToast("최종 서명","#ff4757");
  }
 }
 
@@ -1791,7 +1908,7 @@ function updatePlay(dt){
  shake.t=Math.max(0,shake.t-dt);
  if(shake.t<=0)shake.m=0;
  player.rollCd=Math.max(0,player.rollCd-dt);
- player.fireCd=Math.max(0,player.fireCd-dt);
+ player.fireCd=Math.max(0,player.fireCd-dt*(caffeineT>0?1.55:1));
  player.swingCd=Math.max(0,player.swingCd-dt);
  player.swing=Math.max(0,player.swing-dt);
  player.muzzle=Math.max(0,player.muzzle-dt);
@@ -1812,6 +1929,12 @@ function updatePlay(dt){
  }
  for(let i=flashes.length-1;i>=0;i--){flashes[i].t-=dt;if(flashes[i].t<=0)flashes.splice(i,1);}
  for(let i=beams.length-1;i>=0;i--){beams[i].t-=dt;if(beams[i].t<=0)beams.splice(i,1);}
+ for(let i=floats.length-1;i>=0;i--){const f2=floats[i];f2.t-=dt;f2.y-=18*dt;if(f2.t<=0)floats.splice(i,1);}
+ for(const S of SKILLS){const st=skillState[S.id];if(st&&st.cd>0)st.cd-=dt;}
+ caffeineT=Math.max(0,caffeineT-dt);
+ comboT-=dt;if(comboT<=0)comboN=0;
+ skillFlash=Math.max(0,skillFlash-dt*1.4);
+ checkUnlocks();
  for(let i=toasts.length-1;i>=0;i--){toasts[i].t-=dt;if(toasts[i].t<=0)toasts.splice(i,1);}
  checkExit();
  if(winT>0){
@@ -2309,6 +2432,11 @@ function drawWorld(){
    ctx.fillStyle="rgba(200,220,255,"+(0.04+0.05*Math.sin(tGlobal*1.5+m.p))+")";
    ctx.fillRect(m.x,m.y,Math.max(1,m.s*1.6),Math.max(1,m.s*1.6));
   }
+  for(const f2 of floats){
+   ctx.globalAlpha=Math.min(1,f2.t*2);
+   txt(f2.txt,f2.x,f2.y,8,f2.col,"center",true);
+   ctx.globalAlpha=1;
+  }
   ctx.restore();
 }
 
@@ -2406,6 +2534,38 @@ function drawHUD(){
    pill(v.x-24,v.y-30,48,13,"#4dd7fe");
    txt("[E] 커피",v.x,v.y-20,7,"#4dd7fe","center");
   }
+ }
+ for(let i=0;i<SKILLS.length;i++){
+  const S=SKILLS[i],st=skillState[S.id];
+  if(!st)continue;
+  const x=VW/2-72+i*50,y=VH-52;
+  if(!st.u){
+   ctx.globalAlpha=.8;
+   pill(x,y,46,18,null);
+   txt(S.short,x+9,y+12,8,"#585d6b",null,true);
+   txt(Math.min(stats[S.stat],S.need)+"/"+S.need,x+29,y+12,6,"#8b91a0","center");
+   ctx.globalAlpha=1;
+  }else{
+   const ready=st.cd<=0;
+   const colr=ready?"#ffd166":"#585d6b";
+   pill(x,y,46,18,colr);
+   if(st.cd>0){
+    ctx.fillStyle="rgba(255,255,255,.13)";
+    ctx.fillRect(x+2,y+2,42*Math.min(1,st.cd/S.cd),14);
+   }
+   txt(String(i+1),x+9,y+12,8,ready?colr:"#585d6b",null,true);
+   txt(S.short,x+27,y+12,8,ready?"#f5f6fa":"#8b91a0","center");
+   if(st.cd>0)txt(Math.ceil(st.cd),x+27,y+21,6,"#ff8090","center");
+  }
+ }
+ if(caffeineT>0){
+  pill(VW/2-40,VH-72,80,13,"#ffd166");
+  txt("카페인 "+caffeineT.toFixed(1)+"s",VW/2,VH-62,7,"#ffd166","center",true);
+ }
+ if(comboN>=2&&comboT>0){
+  ctx.globalAlpha=Math.min(1,comboT);
+  txt("COMBO x"+comboN,VW-10,28,9,"#ffd166","right",true);
+  ctx.globalAlpha=1;
  }
 }
 function drawCrosshair(){
@@ -2687,6 +2847,9 @@ window.__hook={
   hurt:hurtPlayer,
   start:startRun,
   retry:retryFloor,
+  stat:function(k,v){stats[k]=(v===undefined)?999:v;},
+  skill:function(i){trySkill(i);},
+  skState:function(){return skillState;},
   give:function(sub){
    wpn[sub]=true;curWpn=sub;
    if(ammo[sub]!==undefined)ammo[sub]=99;

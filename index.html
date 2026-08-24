@@ -20,6 +20,7 @@ const cv=document.getElementById("cv");
 cv.width=VW;cv.height=VH;
 const ctx=cv.getContext("2d");
 ctx.imageSmoothingEnabled=false;
+let RS=1;
 window.addEventListener("error",function(ev){
  try{
   ctx.setTransform(1,0,0,1,0,0);
@@ -34,9 +35,16 @@ window.addEventListener("error",function(ev){
 });
 
 function resize(){
-  const s=Math.min(window.innerWidth/VW,window.innerHeight/VH);
-  const sc=s>1?Math.floor(s):s;
-  cv.style.width=(VW*sc)+"px";cv.style.height=(VH*sc)+"px";
+  const dpr=window.devicePixelRatio||1;
+  const fit=Math.min(window.innerWidth/VW,window.innerHeight/VH);
+  let k=Math.floor(fit*dpr);
+  if(!(k>=1))k=1;
+  if(k>6)k=6;
+  RS=k;
+  cv.width=VW*k;cv.height=VH*k;
+  cv.style.width=(cv.width/dpr)+"px";
+  cv.style.height=(cv.height/dpr)+"px";
+  ctx.imageSmoothingEnabled=false;
 }
 
 let state="title",tGlobal=0,floorIdx=0,kills=0,deaths=0,playTime=0;
@@ -67,6 +75,7 @@ let player=null;
 let stats={guns:0,rolls:0,heals:0,crits:0};
 let lastKillSrc="other",curShotSrc=null;
 let comboN=0,comboT=0,caffeineT=0,skillFlash=0;
+let docsRun=0,hardMode=false,cleared=false,epiT=-1,epiWave=0,trickleT=0,epiRetry=false;
 const GUNSET=["pistol","shotgun","smg","stapler","revolver","card","homing","pen"];
 const SKILLS=[
  {id:"caffeine",name:"카페인 오버도즈",short:"카",stat:"heals",need:5,cd:22,desc:"6초간 이속·연사 대폭 상승"},
@@ -680,6 +689,7 @@ function parseFloor(i){
  exitTiles=[];vendList=[];enemies=[];bullets=[];parts=[];pickups=[];lobs=[];warns=[];toasts=[];
  bossRef=null;bossActive=false;hasKey=false;alarmActive=false;alarmDone=false;
  exiting=false;winT=0;rfIntroDone=false;paused=false;
+ epiT=-1;epiWave=0;trickleT=0;
  player={x:40,y:40,hp:100,maxhp:100,r:6,speed:95,
   roll:0,rollCd:0,rx:0,ry:0,inv:0,fireCd:0,swing:0,swingCd:0,muzzle:0,recoil:0,
   face:1,aim:0,bob:0,flashRed:0,rollFx:0,pend:[],pressure:100};
@@ -704,6 +714,7 @@ function parseFloor(i){
   else if(ch==="N")pickups.push({kind:"wpn",sub:"toner",x:px,y:py,t:0});
   else if(ch==="H")pickups.push({kind:"wpn",sub:"homing",x:px,y:py,t:0});
   else if(ch==="Y")pickups.push({kind:"wpn",sub:"pen",x:px,y:py,t:0});
+  else if(ch==="D")pickups.push({kind:"doc",x:px,y:py,t:0});
   else if(ch==="g")spawnEnemy("guard",px,py);
   else if(ch==="w")spawnEnemy("worker",px,py);
   else if(ch==="m")spawnEnemy("mgr",px,py);
@@ -722,7 +733,9 @@ function parseFloor(i){
 }
 function spawnEnemy(type,x,y){
  const S=ESTATS[type];
- const e={id:++EID,type,x,y,hp:S.hp,maxhp:S.hp,r:S.r,spd:S.spd||0,touch:S.touch||0,
+ const DF=DIFF();
+ const e={id:++EID,type,x,y,hp:Math.round(S.hp*DF.hp),maxhp:Math.round(S.hp*DF.hp),r:S.r,
+  spd:(S.spd||0)*DF.spd,touch:S.touch?Math.round(S.touch*DF.dmg):0,
   fly:!!S.fly,static:!!S.static,boss:!!S.boss,x0:x,y0:y,
   face:1,faceAng:0,alert:false,st:"idle",stT:0,t:Math.random()*6,
   cool:1+Math.random(),burst:0,bt:0,pd:2+Math.random()*2,flash:0,contactCd:0,
@@ -736,6 +749,17 @@ function initAudio(){
  try{
   AC=new (window.AudioContext||window.webkitAudioContext)();
   master=AC.createGain();master.gain.value=.5;master.connect(AC.destination);
+  const conv=AC.createConvolver();
+  const len=Math.floor(AC.sampleRate*.7);
+  const ir=AC.createBuffer(2,len,AC.sampleRate);
+  for(let c=0;c<2;c++){
+   const d=ir.getChannelData(c);
+   for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.6);
+  }
+  conv.buffer=ir;
+  revIn=AC.createGain();revIn.gain.value=.18;
+  revIn.connect(conv);conv.connect(master);
+  if(state==="title")setMusic("title");
  }catch(e){AC=null;}
 }
 function getNoise(){
@@ -758,7 +782,8 @@ function osc(type,f0,f1,dur,vol,delay){
  o.type=type;o.frequency.setValueAtTime(Math.max(1,f0),t);
  if(f1)o.frequency.exponentialRampToValueAtTime(Math.max(1,f1),t+dur);
  env(g,t,.005,dur,vol);
- o.connect(g);g.connect(master);o.start(t);o.stop(t+dur+.05);
+ o.connect(g);g.connect(master);if(revIn)g.connect(revIn);
+ o.start(t);o.stop(t+dur+.05);
 }
 function noiseHit(dur,vol,fq,q,delay,type){
  if(!AC||muted)return;
@@ -767,7 +792,8 @@ function noiseHit(dur,vol,fq,q,delay,type){
  s.buffer=getNoise();s.loop=true;
  const f=AC.createBiquadFilter();f.type=type||"bandpass";f.frequency.value=fq;f.Q.value=q;
  const g=AC.createGain();env(g,t,.003,dur,vol);
- s.connect(f);f.connect(g);g.connect(master);s.start(t);s.stop(t+dur+.05);
+ s.connect(f);f.connect(g);g.connect(master);if(revIn)g.connect(revIn);
+ s.start(t);s.stop(t+dur+.05);
 }
 function sfx(n){
  if(!AC||muted)return;
@@ -808,35 +834,126 @@ function sfx(n){
 
 const mus={kind:null,next:0,step:0};
 function setMusic(kind){mus.kind=kind;mus.step=0;if(AC)mus.next=AC.currentTime+.1;}
+
+const NOTE_IDX={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+function nm(s){
+ if(!s||s==="."||s==="-")return s==="."?null:s;
+ const m=/^([A-G])(#?)(\d)$/.exec(s);
+ if(!m)return null;
+ return 12*(parseInt(m[3])+1)+NOTE_IDX[m[1]]+(m[2]?1:0);
+}
+function seq(str){return str.trim().split(/\s+/).map(nm);}
+const TRACKS={
+ title:{bpm:78,bt:"triangle",lt:"triangle",
+  bass:seq("A1 . . . . . . . F1 . . . . . . . C2 . . . . . . . G1 . . . . . E1 ."),
+  lead:seq(". . . . E4 . . . . . C4 . . . A3 . . . . . . . . B3 . . G3 . . . . ."),
+  pad:["A2","F2","C3","G2"],
+  drums:"................................"},
+ floor:{bpm:96,bt:"square",lt:"triangle",
+  bass:seq("A1 . . . A1 . E1 . G1 . . . G1 . D1 . A1 . . . A1 . E1 . G1 . . . B1 . C2 ."),
+  lead:seq(". . E4 . . . D4 . . . . . C4 . . . . . A3 . . . C4 . . . . . E4 . D4 . . ."),
+  pad:["A2","G2"],
+  drums:"k.h.s.h.k.h.s.hh.k.h.s.h.k.hks.hh"},
+ tense:{bpm:112,bt:"square",lt:"triangle",shift:12,
+  bass:seq("A1 A1 . A1 . A1 E1 . G1 G1 . G1 . G1 D1 . A1 A1 . A1 . A1 E1 . G1 G1 B1 . C2 . C2 ."),
+  lead:seq("A4 . . E4 . . . . G4 . . . . . D4 . A4 . . E4 . . . . G4 . . B4 . C5 . . ."),
+  pad:["A2","F2"],
+  drums:"k.hks.hkk.h.s.hh.k.hks.hkk.hks.hhs"},
+ boss:{bpm:132,bt:"sawtooth",lt:"square",
+  bass:seq("A1 A1 A2 A1 G1 G1 G2 G1 F1 F1 F2 F1 E1 E1 E2 E1 A1 A1 A2 A1 G1 G1 G2 G1 F1 F1 F2 F1 E2 E2 D2 C2"),
+  lead:seq("A3 . C4 . E4 . . . G4 . . A4 . . G4 . E4 . C4 . A3 . . . . . . . . . . ."),
+  pad:["A2","A2","G2","F2"],
+  drums:"kh.hks.hkkhhks.hhkh.hks.hkkhhks.hs"}
+};
+let revIn=null;
 function note(type,midi,t,dur,vol){
  const o=AC.createOscillator(),g=AC.createGain();
  o.type=type;o.frequency.value=440*Math.pow(2,(midi-69)/12);
  g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
- o.connect(g);g.connect(master);o.start(t);o.stop(t+dur+.02);
+ o.connect(g);g.connect(master);if(revIn)g.connect(revIn);
+ o.start(t);o.stop(t+dur+.02);
 }
 function hat(t,vol,snare){
  const s=AC.createBufferSource();s.buffer=getNoise();s.loop=true;
  const f=AC.createBiquadFilter();f.type="highpass";f.frequency.value=snare?1800:6000;
  const g=AC.createGain();
  g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.0001,t+.06);
- s.connect(f);f.connect(g);g.connect(master);s.start(t);s.stop(t+.1);
+ s.connect(f);f.connect(g);g.connect(master);if(revIn)g.connect(revIn);
+ s.start(t);s.stop(t+.1);
+}
+function kick(t,vol){
+ const o=AC.createOscillator(),g=AC.createGain();
+ o.type="sine";o.frequency.setValueAtTime(120,t);
+ o.frequency.exponentialRampToValueAtTime(38,t+.12);
+ g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.0001,t+.14);
+ o.connect(g);g.connect(master);o.start(t);o.stop(t+.16);
+}
+function snare(t,vol){
+ const s=AC.createBufferSource();s.buffer=getNoise();s.loop=true;
+ const f=AC.createBiquadFilter();f.type="bandpass";f.frequency.value=1800;f.Q.value=.8;
+ const g=AC.createGain();
+ g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.0001,t+.09);
+ s.connect(f);f.connect(g);g.connect(master);if(revIn)g.connect(revIn);
+ s.start(t);s.stop(t+.12);
+ osc("triangle",190,120,.07,vol*.7,t);
+}
+function drumHit(d,t){
+ if(d==="k")kick(t,.42);
+ else if(d==="s")snare(t,.22);
+ else if(d==="h")hat(t,.09,false);
+ else if(d==="H")hat(t,.13,true);
+}
+function padChord(rootM,t,dur){
+ const iv=[0,(rootM%12===9?3:4),7];
+ for(const i of iv)note("triangle",rootM+i,t,dur,.038);
 }
 setInterval(function(){
  if(!AC||!mus.kind||muted)return;
- const bd=mus.kind==="boss"?0.16:0.24;
+ const T=TRACKS[mus.kind];if(!T)return;
+ const sps=60/T.bpm/4;
  if(mus.next<AC.currentTime)mus.next=AC.currentTime+.05;
- while(mus.next<AC.currentTime+.25){
+ while(mus.next<AC.currentTime+.28){
   const s=mus.step++;
-  const bassC=[33,33,36,33,31,31,33,28],bassB=[33,33,36,33,38,36,33,31];
-  note("square",(mus.kind==="boss"?bassB:bassC)[s%8],mus.next,bd*.9,.06);
-  if(s%2===0)hat(mus.next,.02,false);
-  if(mus.kind==="boss"){
-   note("triangle",[69,72,76,72][Math.floor(s/2)%4],mus.next,bd*.7,.045);
-   if(s%4===2)hat(mus.next,.05,true);
+  const b=T.bass[s%T.bass.length];
+  if(b!=null)note(T.bt,b,mus.next,sps*2.6,.07);
+  let l=T.lead[s%T.lead.length];
+  if(l!=null){
+   if(T.shift)l+=T.shift;
+   note(T.lt,l,mus.next,sps*1.8,.05);
   }
-  mus.next+=bd;
+  if(T.pad&&s%16===0){
+   const pm=nm(T.pad[(s/16)%T.pad.length]);
+   if(pm!=null)padChord(pm,mus.next,sps*15);
+  }
+  if(T.drums){
+   const d=T.drums[s%T.drums.length];
+   if(d&&d!==".")drumHit(d,mus.next);
+  }
+  if(mus.kind==="boss"&&bossRef&&!bossRef.dead&&bossRef.heli&&s%4===2)
+   kick(mus.next,.16);
+  if(player&&player.hp>0&&player.hp<player.maxhp*.3&&s%8===0){
+   kick(mus.next,.3);kick(mus.next+sps*1.2,.18);
+  }
+  if(epiT>0&&s%16===8){
+   const dly=Math.max(0,mus.next-AC.currentTime);
+   osc("square",(Math.floor(mus.step/16)%2)?720:540,0,.25,.05,dly);
+  }
+  mus.next+=sps;
  }
 },90);
+function sting(kind){
+ if(!AC||muted)return;
+ const t=AC.currentTime+.02;
+ if(kind==="win"){
+  const n=[69,73,76,81];
+  for(let i=0;i<n.length;i++)note("square",n[i],t+i*.11,.18,.12);
+  padChord(69,t+n.length*.11,1.4);
+ }else{
+  const n=[57,53,50,45];
+  for(let i=0;i<n.length;i++)note("sawtooth",n[i],t+i*.16,.3,.11);
+  kick(t,.5);
+ }
+}
 
 const keys={},mouse={x:VW/2,y:VH/2,down:false};
 let dlgNext=false,rollPressed=false,interactPressed=false;
@@ -861,6 +978,9 @@ function bindInput(){
     if(e.code==="Digit3")trySkill(2);
    }
    if(state==="title"&&(e.code==="Enter"||e.code==="Space"))startRun();
+   if(state==="title"&&e.code==="KeyH"){
+    hardMode=!hardMode;sset("nr_hard",hardMode?"1":"0");sfx("ui");
+   }
   }
   keys[e.code]=true;
  });
@@ -946,20 +1066,32 @@ function resetGear(){
  ammo={shotgun:0,smg:0,stapler:0,revolver:0,toner:0,homing:0,pen:0};curWpn="pistol";
  kills=0;deaths=0;playTime=0;
  stats={guns:0,rolls:0,heals:0,crits:0};
+ docsRun=0;
  skillState={};
  for(const S of SKILLS)skillState[S.id]={u:false,cd:0};
  caffeineT=0;comboN=0;comboT=0;
  floats=[];
 }
+function DIFF(){
+ return hardMode?{hp:1.35,dmg:1.3,spd:1.12}:{hp:1,dmg:1,spd:1};
+}
+function sget(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+function sset(k,v){try{localStorage.setItem(k,String(v));}catch(e){}}
 function beginFloor(i,retry){
  const keep=player?player.hp:100;
  floorIdx=i;
  parseFloor(i);
+ if(epiRetry){
+  epiRetry=false;
+  bossRef.dead=true;
+  stampCorpse(bossRef);
+  startEpilogue();
+ }
  if(retry){player.hp=100;ammo.shotgun+=4;ammo.smg+=20;ammo.stapler+=6;ammo.revolver+=2;ammo.toner+=1;ammo.homing+=2;ammo.pen+=1;}
  else player.hp=Math.max(1,keep);
  pushToast(FLOORS[i].name+" · "+FLOORS[i].sub,"#f4c542");
  pushToast(FLOORS[i].toast,"#9aa3b2");
- setMusic(i===FLOORS.length-1?"calm":"calm");
+ setMusic("floor");
  state="play";
 }
 function gotoNextFloor(){
@@ -1215,13 +1347,16 @@ function spriteOf(e){
 }
 function hurtPlayer(dmg,srcAng){
  if(!player||player.inv>0||player.roll>0||state!=="play")return;
+ dmg*=DIFF().dmg;
  player.hp-=dmg;player.inv=.75;player.flashRed=.25;
  shake.t=.18;shake.m=2.5;sfx("hurt");
  const kb=40;
  moveEnt(player,-Math.cos(srcAng)*kb*dtSafe(),-Math.sin(srcAng)*kb*dtSafe(),false);
- for(let i=0;i<6;i++)parts.push({x:player.x,y:player.y-8,vx:(Math.random()-.5)*90,vy:(Math.random()-.5)*90-30,g:220,life:.4,col:"#c43b44",sz:1});
+ for(let i=0;i<6;i++)parts.push({x:player.x,y:player.y-8,vx:(Math.random()-.5)*90,vy:(Math.random()-.5)*90-30,g:220,life:.4,col:"#ff4757",sz:1});
  if(player.hp<=0){
   player.hp=0;deaths++;state="over";sfx("roar");
+  setMusic(null);sting("lose");
+  if(epiT>0)epiRetry=true;
  }
 }
 let lastDt=0.016;
@@ -1270,14 +1405,70 @@ function bossDown(){
  bullets.length=0;warns.length=0;lobs.length=0;
  for(const e of enemies)if(!e.dead&&e.type!=="ceo")e.dead=true;
  shake.t=.6;shake.m=5;sfx("boom");sfx("roar");
- winT=1.4;
  for(let i=0;i<40;i++){
   const a=Math.random()*7,s=30+Math.random()*140;
-  parts.push({x:bossRef.x,y:bossRef.y-10,vx:Math.cos(a)*s,vy:Math.sin(a)*s,g:150,life:.6+Math.random()*.5,col:["#f4c542","#ffb347","#6b6b6b"][i%3],sz:2});
+  parts.push({x:bossRef.x,y:bossRef.y-10,vx:Math.cos(a)*s,vy:Math.sin(a)*s,g:150,life:.6+Math.random()*.5,col:["#ffd166","#ffb347","#6b6b6b"][i%3],sz:2});
  }
+ startEpilogue();
+}
+const EPI_LINES=[
+ ["도혁","사이렌 소리다. 검찰이다."],
+ ["경호팀","...본부 명령이다. 전원 — 철수. 이건 더 이상 사내 문제가 아니야."],
+ ["도혁","가지 마. 법정에서는 같이 갈 수 있어."],
+ ["CEO 강만재","(연행되며) 도혁... 너 이직 잘하더라."],
+ ["도혁","아니요 사장님. 퇴사입니다. 오늘부로."]
+];
+function startEpilogue(){
+ epiT=48;epiWave=0;trickleT=4;winT=0;
+ bullets.length=0;warns.length=0;lobs.length=0;
+ for(const e of enemies)if(!e.dead&&!e.boss)e.dead=true;
+ setMusic("boss");
+ pushToast("회사 최후의 반격!","#ff4757");
+ pushToast("검찰 도착까지 버텨라!","#ffd166");
+ sfx("alarm");
+ shake.t=.3;shake.m=3;
+}
+function epiSpawnAt(type,x,y){
+ const e=spawnEnemy(type,x,y);
+ e.alert=true;
+ parts.push({x:x,y:y,vx:0,vy:0,g:0,life:.25,col:"#9aa3b2",sz:8,ring:true});
+ return e;
+}
+function farCorner(){
+ const cs=[[36,36],[VW-36,36],[36,VH-44],[VW-36,VH-44]];
+ let best=cs[0],bd=-1;
+ for(const c of cs){
+  const d=Math.hypot(c[0]-player.x,c[1]-player.y);
+  if(d>bd){bd=d;best=c;}
+ }
+ return best;
+}
+function epiSpawn(w){
+ if(w===0){
+  const c=farCorner();
+  epiSpawnAt("guard",c[0]-20,c[1]);epiSpawnAt("guard",c[0]+20,c[1]);
+  epiSpawnAt("worker",c[0],c[1]+22);epiSpawnAt("worker",VW-c[0],VH-c[1]);
+ }else if(w===1){
+  const c=farCorner();
+  epiSpawnAt("shield",c[0],c[1]);epiSpawnAt("mgr",c[0]+26,c[1]);
+  epiSpawnAt("mgr",c[0]-26,c[1]);epiSpawnAt("drone",VW/2,30);
+ }else{
+  epiSpawnAt("clone",60,36);epiSpawnAt("clone",VW-60,36);
+  epiSpawnAt("exec",farCorner()[0],VH-50);
+  epiSpawnAt("guard",VW/2-30,30);epiSpawnAt("guard",VW/2+30,30);
+ }
+ sfx("alarm");
+}
+function finishEpilogue(){
+ epiT=-1;
+ for(const e of enemies)e.dead=true;
+ bullets.length=0;warns.length=0;lobs.length=0;
+ cleared=true;sset("nr_cleared","1");
+ setMusic(null);sting("win");
+ showDialog(EPI_LINES,function(){state="win";});
 }
 function eShoot(e,ang,dmg,spd,col,size,pierce){
- shoot(e.x,e.y-12,ang,{dmg:dmg,spd:spd},"e",col||"#ff6b57",size||2,pierce);
+ shoot(e.x,e.y-12,ang,{dmg:Math.round(dmg*DIFF().dmg),spd:spd},"e",col||"#ff6b57",size||2,pierce);
 }
 function ringShot(e,n,spd,dmg,col){
  const base=Math.random()*7;
@@ -1304,6 +1495,7 @@ function seekBand(e,min,max,dt,sp){
 
 function triggerAlarm(){
  alarmDone=true;alarmActive=true;
+ setMusic("tense");
  sfx("alarm");
  pushToast("경보 발생!! 증원이 옵니다","#d93a3a");
  const corners=[[VW-60,40],[40,VH-56]];
@@ -1421,7 +1613,7 @@ function updateEnemy(e,dt){
   }else if(e.fire>0){
    e.fire-=dt;
    e.tick-=dt;
-   if(e.tick<=0){e.tick=.25;hurtPlayer(9,e.faceAng);}
+   if(e.tick<=0){e.tick=.25;hurtPlayer(Math.round(9*DIFF().dmg),e.faceAng);}
    if(e.fire<=0)e.cool=1.6;
   }else{
    e.cool-=dt;
@@ -1937,15 +2129,29 @@ function updatePlay(dt){
  checkUnlocks();
  for(let i=toasts.length-1;i>=0;i--){toasts[i].t-=dt;if(toasts[i].t<=0)toasts.splice(i,1);}
  checkExit();
- if(winT>0){
-  winT-=dt;
-  if(winT<=0)showDialog(WIN_LINES,function(){state="win";});
+ if(epiT>0){
+  epiT-=dt;
+  trickleT-=dt;
+  if(trickleT<=0){
+   trickleT=6;
+   const c=farCorner();
+   epiSpawnAt(Math.random()<.6?"guard":"drone",c[0],c[1]);
+  }
+  if(epiWave===0&&epiT<44){epiWave=1;epiSpawn(0);}
+  if(epiWave===1&&epiT<30){epiWave=2;epiSpawn(1);}
+  if(epiWave===2&&epiT<16){epiWave=3;epiSpawn(2);}
+  if(epiT<=0)finishEpilogue();
  }
  if(FLOORS[floorIdx].boss&&bossRef&&!rfIntroDone){
   rfIntroDone=true;
-  showDialog(BOSS_INTRO,function(){
+  const bi=BOSS_INTRO.slice();
+  if(docsRun>=5){
+   bi.splice(2,0,["도혁","그리고 N-13 전체. 조각 다 모았습니다."]);
+   bi.splice(3,0,["CEO 강만재","...제법이군. 그래서 더 확실히 지워야 하는데."]);
+  }
+  showDialog(bi,function(){
    bossActive=true;bossRef.alert=true;setMusic("boss");sfx("roar");
-   pushToast("CEO 강만재 - 구조조정을 시작하지","#d93a3a");
+   pushToast("CEO 강만재 - 구조조정을 시작하지","#ff4757");
   });
  }
 }
@@ -1971,7 +2177,7 @@ function loop(ts){
 }
 let scanPat=null,vigCv=null,TW=[],elevOpen=0;
 let lightCv=null,lightCtx=null,SKYA=[],SKYB=[],STARS=[],heliBeam={x:200,y:120};
-let uiCv=null,uiCtx=null,uiQ=3;
+let uiCv=null,uiCtx=null,uiQ=4;
 
 function buildFX(){
  const sc=document.createElement("canvas");sc.width=1;sc.height=2;
@@ -2145,7 +2351,12 @@ function drawPickups(){
    ctx.globalAlpha=1;
   }else if(p.kind==="med"){
    ctx.drawImage(SPR.med,-2,-4);
-  }else if(p.kind==="ammo"){
+ }else if(p.kind==="doc"){
+  docsRun++;
+  player.maxhp+=10;player.hp=Math.min(player.maxhp,player.hp+10);
+  sfx("key");
+  pushToast("N-13 서류 조각 ("+Math.min(docsRun,5)+"/5) — 최대 체력 +10","#b887ff");
+ }else if(p.kind==="ammo"){
    ctx.drawImage(SPR.ammo,-2,-3);
   }else{
    ctx.translate(0,bob*0);
@@ -2187,6 +2398,7 @@ function drawLobs(){
 }
 function drawBullets(){
  ctx.save();
+ ctx.imageSmoothingEnabled=true;
  ctx.globalCompositeOperation="lighter";
  for(const b of bullets){
   const core=b.from==="p"?(b.crit?"#ffd166":"#ffe9a8"):"#ff5964";
@@ -2245,7 +2457,9 @@ function drawParts(){
   }else if(p.k==="ember"){
    const img=glow(p.col,6);
    ctx.globalAlpha=Math.min(1,p.life*2.5);
+   ctx.save();ctx.imageSmoothingEnabled=true;
    ctx.drawImage(img,p.x-img.width/2,p.y-img.height/2);
+   ctx.restore();
    ctx.globalAlpha=1;
    p.vy-=40*dtSafe();
   }else{
@@ -2466,7 +2680,15 @@ function drawHUD(){
  if(hasKey){
   pill(134,6,46,18,"#ffd166");
   ctx.drawImage(SPR.key,140,11);
-  txt("KEY",158,18,8,"#ffd166",null,true);
+  txt("KEY",158,18,7,"#ffd166",null,true);
+ }
+ if(docsRun>0){
+  pill(184,6,70,18,"#b887ff");
+  txt("N-13 "+Math.min(docsRun,5)+"/5",219,18,8,"#d9c2ff","center");
+ }
+ if(epiT>0){
+  pill(VW/2-74,6,148,18,"#ff4757");
+  txt("검찰 도착 "+Math.ceil(epiT)+"초 전",VW/2,19,9,"#ffd166","center",true);
  }
  pill(VW-118,6,52,16,null);
  txt("KILL "+kills,VW-92,17,8,"#c3cad6","center");
@@ -2714,9 +2936,11 @@ function drawTitle(){
  const story=["지하 B1에서 옥상 RF까지 아홉 개의 층.","층의 사원증을 찾아 엘리베이터를 열고,","옥상의 CEO에게 사표를 직접 전하세요."];
  let sy=204;
  for(const s of story){txt(s,VW/2,sy,8,"#7f8899","center");sy+=11;}
+ if(cleared)txt("CLEAR 배지 — HARD MODE 해방",VW/2,236,8,"#ffd166","center",true);
+ txt("[H] HARD MODE : "+(hardMode?"ON":"OFF"),VW/2,VH-30,8,hardMode?"#ff4757":"#585d6b","center",true);
  ctx.strokeStyle="rgba(255,71,87,.4)";ctx.lineWidth=1;
- ctx.beginPath();ctx.moveTo(VW/2-60,240.5);ctx.lineTo(VW/2+60,240.5);ctx.stroke();
- txt("모티브: 영화 <회사원> (2012) - Fan Game",VW/2,VH-18,7,"#585d6b","center");
+ ctx.beginPath();ctx.moveTo(VW/2-60,VH-20.5);ctx.lineTo(VW/2+60,VH-20.5);ctx.stroke();
+ txt("모티브: 영화 <회사원> (2012) - Fan Game",VW/2,VH-8,7,"#585d6b","center");
  ctx.strokeStyle="rgba(160,190,230,.20)";ctx.lineWidth=1;
  ctx.beginPath();
  for(let i=0;i<70;i++){
@@ -2754,14 +2978,27 @@ function drawWin(){
  txt("강만재 CEO는 정리해고 되었습니다.",VW/2,124,9,"#c3cad6","center");
  pill(VW/2-116,138,232,16,null);
  txt("KILL "+kills+" · DEATH "+deaths+" · "+fmtTime(playTime),VW/2,149,8,"#f5f6fa","center");
+ pill(VW/2-116,158,232,14,null);
+ txt("N-13 서류 "+Math.min(docsRun,5)+"/5"+(hardMode?" · HARD MODE":""),VW/2,168,7,"#d9c2ff","center");
+ const rk=rankCalc();
+ const rc={S:"#ffd166",A:"#4dd7fe",B:"#f5f6fa",C:"#8b91a0"}[rk];
+ txt("RANK",VW/2,184,7,"#585d6b","center");
+ ctx.font="bold 30px monospace";
+ ctx.fillStyle=rc;ctx.textAlign="center";
+ ctx.fillText(rk,VW/2,212);ctx.textAlign="left";
  const cred=[["김도혁","자유"],["베넷 컴퍼니","폐업"],["당신","퇴근"]];
- let y=170;
+ let y=226;
  for(const c of cred){
-  pill(VW/2-70,y-9,140,14,"#ffd166");
+  pill(VW/2-70,y-9,140,13,"#ffd166");
   txt(c[0]+" — "+c[1],VW/2,y+1,8,"#e8cf8a","center");
-  y+=18;
+  y+=14;
  }
- if(Math.sin(tGlobal*5)>-.2)txt("[ R ] 처음부터 또는 클릭",VW/2,232,10,"#ffd166","center",true);
+ if(Math.sin(tGlobal*5)>-.2)txt("[ R ] 처음부터 또는 클릭",VW/2,VH-12,9,"#ffd166","center",true);
+}
+function rankCalc(){
+ let sc=10000-Math.floor(playTime)*8-deaths*800+kills*15+Math.min(docsRun,5)*400;
+ if(hardMode)sc+=1500;
+ return sc>=9500?"S":sc>=7500?"A":sc>=5500?"B":"C";
 }
 function drawPause(){
  ctx.fillStyle="rgba(4,6,10,.66)";ctx.fillRect(0,0,VW,VH);
@@ -2779,18 +3016,20 @@ function drawPause(){
 }
 
 function render(){
- ctx.setTransform(1,0,0,1,0,0);
+ ctx.setTransform(RS,0,0,RS,0,0);
  ctx.fillStyle="#000";ctx.fillRect(0,0,VW,VH);
  if(state==="title"){drawTitle();return;}
  if(player&&floorCv)drawWorld();
  if(player&&floorCtx){
   renderLights();
-  ctx.drawImage(lightCv,0,0);
+  ctx.save();ctx.imageSmoothingEnabled=true;
+  ctx.drawImage(lightCv,0,0,VW,VH);
+  ctx.restore();
   if(alarmActive){
    ctx.fillStyle="rgba(255,40,40,"+(0.05+0.05*Math.sin(tGlobal*7))+")";
    ctx.fillRect(0,0,VW,VH);
   }
-  if(vigCv)ctx.drawImage(vigCv,0,0);
+  if(vigCv){ctx.save();ctx.imageSmoothingEnabled=true;ctx.drawImage(vigCv,0,0,VW,VH);ctx.restore();}
   if(scanPat){ctx.fillStyle=scanPat;ctx.fillRect(0,0,VW,VH);}
   if(player.flashRed>0){
    ctx.fillStyle="rgba(200,30,30,"+player.flashRed*.8+")";
@@ -2850,6 +3089,9 @@ window.__hook={
   stat:function(k,v){stats[k]=(v===undefined)?999:v;},
   skill:function(i){trySkill(i);},
   skState:function(){return skillState;},
+  epi:function(v){epiT=v;},
+  docs:function(n){docsRun=n;},
+  hard:function(v){hardMode=v;},
   give:function(sub){
    wpn[sub]=true;curWpn=sub;
    if(ammo[sub]!==undefined)ammo[sub]=99;
@@ -2864,6 +3106,8 @@ window.addEventListener("resize",resize);
 resize();
 cv.style.cursor="none";
 buildFX();
+cleared=sget("nr_cleared")==="1";
+hardMode=sget("nr_hard")==="1";
 requestAnimationFrame(loop);
 </script>
 </body>

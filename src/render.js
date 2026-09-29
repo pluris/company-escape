@@ -174,12 +174,20 @@ function drawPickups(){
    ctx.globalAlpha=1;
   }else if(p.kind==="med"){
    ctx.drawImage(SPR.med,-2,-4);
- }else if(p.kind==="doc"){
-  docsRun++;
-  player.maxhp+=10;player.hp=Math.min(player.maxhp,player.hp+10);
-  sfx("key");
-  pushToast("N-13 서류 조각 ("+Math.min(docsRun,5)+"/5) — 최대 체력 +10","#b887ff");
- }else if(p.kind==="ammo"){
+  }else if(p.kind==="doc"){
+   ctx.drawImage(SPR.doc,-6,-6);
+   ctx.globalAlpha=.4+.4*Math.sin(p.t*5);
+   ctx.fillStyle="#b887ff";
+   ctx.fillRect(-8,-2,16,2);
+   ctx.fillRect(-2,-8,2,16);
+   ctx.globalAlpha=1;
+  }else if(p.kind==="upg"){
+   ctx.drawImage(SPR.upg,-6,-6);
+   ctx.globalAlpha=.5+.4*Math.sin(p.t*6);
+   ctx.fillStyle="#fff";
+   ctx.fillRect(-1,-9,2,1);
+   ctx.globalAlpha=1;
+  }else if(p.kind==="ammo"){
    ctx.drawImage(SPR.ammo,-2,-3);
   }else{
    ctx.translate(0,bob*0);
@@ -509,10 +517,50 @@ function drawGun(px,py){
   ctx.fillStyle="#585d6b";ctx.fillRect(3+len-3,-1.5,3,1.5);
   if(w==="shotgun"){ctx.fillStyle="#6b4a2e";ctx.fillRect(4,1,4,2);}
  }
- if(player.muzzle>0&&curWpn!=="case"&&curWpn!=="ext"&&curWpn!=="chair"){
-  ctx.fillStyle="#ffe9a8";
-  ctx.beginPath();
-  ctx.moveTo(12,0);ctx.lineTo(17,-3);ctx.lineTo(17,3);ctx.closePath();ctx.fill();
+ if(player.muzzle>0){
+  // per-weapon muzzle: shape, size and colour all differ so each gun
+  // reads differently the instant you fire it
+  const t=player.muzzle;
+  if(w==="case"){
+   ctx.strokeStyle="rgba(255,233,168,"+(t/.16)+")";
+   ctx.lineWidth=2;
+   ctx.beginPath();ctx.arc(14,0,18,-.7,.7);ctx.stroke();
+  }else if(w==="ext"){
+   ctx.fillStyle="rgba(207,233,255,.5)";
+   ctx.beginPath();ctx.arc(16,0,7,.0,6.3);ctx.fill();
+  }else if(w==="chair"){
+   ctx.strokeStyle="rgba(224,164,88,.8)";ctx.lineWidth=2;
+   ctx.beginPath();ctx.arc(10,0,12,-1.2,1.2);ctx.stroke();
+  }else if(w==="pen"){
+   ctx.strokeStyle="rgba(255,255,255,"+(t/.08)+")";ctx.lineWidth=2;
+   ctx.beginPath();ctx.moveTo(8,0);ctx.lineTo(30,0);ctx.stroke();
+  }else if(w==="shotgun"){
+   ctx.fillStyle="#fff6d8";
+   ctx.beginPath();
+   ctx.moveTo(10,-2);ctx.lineTo(24,-7);ctx.lineTo(20,0);ctx.lineTo(24,7);ctx.lineTo(10,2);
+   ctx.closePath();ctx.fill();
+  }else if(w==="smg"){
+   ctx.fillStyle="#ffe9a8";
+   ctx.beginPath();
+   ctx.moveTo(10,-1.5);ctx.lineTo(19,-4);ctx.lineTo(16,0);ctx.lineTo(19,3);ctx.lineTo(10,1.5);
+   ctx.closePath();ctx.fill();
+  }else if(w==="stapler"){
+   ctx.fillStyle="#ff8090";
+   ctx.fillRect(10,-2,7,4);
+  }else if(w==="revolver"){
+   ctx.fillStyle="#fff";
+   ctx.beginPath();ctx.arc(13,0,6,0,6.3);ctx.fill();
+   ctx.fillStyle="rgba(255,209,102,.6)";
+   ctx.beginPath();ctx.arc(13,0,10,0,6.3);ctx.fill();
+  }else if(w==="card"){
+   ctx.fillStyle="rgba(245,246,250,.7)";
+   ctx.fillRect(8,-3,5,6);
+  }else{
+   ctx.fillStyle="#ffe9a8";
+   ctx.beginPath();
+   ctx.moveTo(11,0);ctx.lineTo(19,-4);ctx.lineTo(16,0);ctx.lineTo(19,3);
+   ctx.closePath();ctx.fill();
+  }
  }
  ctx.restore();
 }
@@ -1085,6 +1133,17 @@ window.__hook={
   hard:function(v){hardMode=v;},
   key_:function(v){hasKey=v;},
   click_:function(){tryPickByMouse();},
+  collect_:function(kind){
+   for(let i=pickups.length-1;i>=0;i--){
+    if(kind&&pickups[i].kind!==kind)continue;
+    const pk=pickups[i];
+    applyPickup(pk);
+    pickups.splice(i,1);
+    return true;
+   }
+   return false;
+  },
+  docsCount:function(){return docsRun;},
   exit_:function(){gotoNextFloor();},
   perks:function(){return perks.slice();},
   wlv:function(w){return wlv(w);},

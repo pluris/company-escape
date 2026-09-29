@@ -135,6 +135,12 @@ function applyPickup(p){
   pushToast("+30 HP","#37d67a");
  }else if(p.kind==="ammo"){
   ammo.shotgun+=6;ammo.smg+=24;ammo.stapler+=4;ammo.revolver+=2;ammo.toner+=1;ammo.homing+=2;ammo.pen+=1;sfx("pick");
+ }else if(p.kind==="doc"){
+  docsRun++;
+  player.maxhp+=10;player.hp=Math.min(player.maxhp,player.hp+10);
+  sfx("key");
+  addFloat(p.x,p.y-24,"N-13 "+Math.min(docsRun,5)+"/5","#b887ff");
+  pushToast("N-13 서류 조각 ("+Math.min(docsRun,5)+"/5) — 최대 체력 +10","#b887ff");
  }else if(p.kind==="wpn"){
   wpn[p.sub]=true;curWpn=p.sub;
   if(p.sub==="shotgun")ammo.shotgun+=10;

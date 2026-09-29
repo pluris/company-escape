@@ -192,30 +192,21 @@ function beginFloor(i,retry){
  state="play";
 }
 function gotoNextFloor(){
- sfx("elev");
  const nxt=FLOORS[floorIdx+1];
- const label=nxt?nxt.name+" · "+nxt.sub:null;
- const goNext=function(){
-  const story=function(){
-   startTrans(function(){beginFloor(floorIdx+1);},label);
-  };
-  if(floorIdx===0){
-   startTrans(function(){
-    showDialog(EXIT0,function(){openPerkPick(FLOORS[1].name+" · "+FLOORS[1].sub);});
-   },label);
-  }else if(floorIdx===4){
-   startTrans(function(){
-    showDialog(MID_STORY,function(){openPerkPick(label);});
-   },label);
-  }else{
-   openPerkPick(label);
-  }
- };
- if(!nxt){
-  goNext();
-  return;
+ if(!nxt)return;
+ sfx("elev");
+ const label=nxt.name+" · "+nxt.sub;
+ if(floorIdx===0){
+  startTrans(function(){
+   showDialog(EXIT0,function(){openPerkPick(label);});
+  },label);
+ }else if(floorIdx===4){
+  startTrans(function(){
+   showDialog(MID_STORY,function(){openPerkPick(label);});
+  },label);
+ }else{
+  openPerkPick(label);
  }
- goNext();
 }
 function rollPerks(){
  const pool=PERKS.filter(function(pk){

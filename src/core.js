@@ -1,6 +1,6 @@
 "use strict";
 const VW=480,VH=272,TS=16,MW=30,MH=17;
-const CHS=1.5;
+const CHS=1.0;
 let EID=0;
 const cv=document.getElementById("cv");
 cv.width=VW;cv.height=VH;

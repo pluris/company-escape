@@ -1,16 +1,17 @@
-// tactic: recon(시야공유) / brute(돌진 예고) / sniper(조준 라인) / artillery(포격 예고)
+// radii tuned to the new larger sprites
 const ESTATS={
- guard:{hp:34,r:6,spd:62,tactic:"brute"},
- worker:{hp:22,r:5,spd:84,touch:12,tactic:"brute"},
- mgr:{hp:46,r:6,spd:58,tactic:"sniper"},
- drone:{hp:26,r:6,spd:80,touch:14,fly:true,tactic:"recon"},
- printer:{hp:50,r:8,static:true,tactic:"artillery"},
- shield:{hp:70,r:7,spd:46,touch:8,tactic:"brute"},
+ guard:{hp:34,r:8,spd:62,tactic:"brute"},
+ worker:{hp:22,r:6,spd:84,touch:12,tactic:"brute"},
+ mgr:{hp:46,r:7,spd:58,tactic:"sniper"},
+ drone:{hp:26,r:7,spd:80,touch:14,fly:true,tactic:"recon"},
+ printer:{hp:50,r:9,static:true,tactic:"artillery"},
+ shield:{hp:70,r:8,spd:46,touch:8,tactic:"brute"},
  cctv:{hp:30,r:7,static:true,tactic:"recon"},
- chief:{hp:300,r:9,spd:70,touch:14,tactic:"brute"},
+ chief:{hp:300,r:10,spd:70,touch:14,tactic:"brute"},
  exec:{hp:190,r:7,spd:66,tactic:"sniper"},
- clone:{hp:55,r:6,spd:64,tactic:"sniper"},
- ceo:{hp:950,r:10,spd:40,touch:14,boss:true,tactic:"sniper"}
+ intern:{hp:26,r:5,spd:96,touch:9,tactic:"brute"},
+ clone:{hp:55,r:7,spd:64,tactic:"sniper"},
+ ceo:{hp:950,r:12,spd:40,touch:14,boss:true,tactic:"sniper"}
 };
 
 // elite variants: one per floor, gold outline, 2.5x hp
@@ -27,7 +28,7 @@ function parseFloor(i){
  bossRef=null;bossActive=false;hasKey=false;alarmActive=false;alarmDone=false;
  exiting=false;winT=0;rfIntroDone=false;paused=false;
  epiT=-1;epiWave=0;trickleT=0;
- player={x:40,y:40,hp:100,maxhp:100,r:6,speed:95,
+ player={x:40,y:40,hp:100,maxhp:100,r:7,speed:100,
   roll:0,rollCd:0,rx:0,ry:0,inv:0,fireCd:0,swing:0,swingCd:0,muzzle:0,recoil:0,
   face:1,aim:0,bob:0,flashRed:0,rollFx:0,pend:[],pressure:100};
  for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){
@@ -54,6 +55,7 @@ function parseFloor(i){
   else if(ch==="D")pickups.push({kind:"doc",x:px,y:py,t:0});
   else if(ch==="g")spawnEnemy("guard",px,py);
   else if(ch==="w")spawnEnemy("worker",px,py);
+  else if(ch==="i")spawnEnemy("intern",px,py);
   else if(ch==="m")spawnEnemy("mgr",px,py);
   else if(ch==="d")spawnEnemy("drone",px,py);
   else if(ch==="p")spawnEnemy("printer",px,py);

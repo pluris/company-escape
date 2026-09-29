@@ -169,11 +169,25 @@ function damage(e,dmg,srcAng,isBullet){
   while(da>Math.PI)da-=2*Math.PI;while(da<-Math.PI)da+=2*Math.PI;
   if(Math.abs(da)<.9){
    dmg*=.15;
-   parts.push({x:e.x,y:e.y-8,vx:0,vy:-10,g:0,life:.2,col:"#57c8e8",sz:2});
+   addDmgNum(e.x,e.y-20,Math.round(dmg),"#8b91a0");
+   parts.push({x:e.x,y:e.y-10,vx:0,vy:-10,g:0,life:.2,col:"#4dd7fe",sz:2});
+   addDmgNum(e.x,e.y-20,"BLOCK","#4dd7fe");
+   return;
   }
  }
- e.hp-=dmg;e.flash=.08;e.alert=true;
- for(let i=0;i<3;i++)parts.push({x:e.x,y:e.y-8,vx:(Math.random()-.5)*70,vy:(Math.random()-.5)*70-20,g:200,life:.35,col:"#c43b44",sz:1});
+ const shown=Math.max(1,Math.round(dmg));
+ e.hp-=dmg;e.flash=.1;e.alert=true;
+ // hit juice: stop-frame, kick the target, spray sparks
+ hitStop=Math.max(hitStop,.022);
+ e.hitT=.12;
+ if(srcAng!==undefined&&!e.static&&!e.boss){
+  const kn=3.2;
+  moveEnt(e,Math.cos(srcAng)*kn,Math.sin(srcAng)*kn,e.fly);
+ }
+ for(let i=0;i<5;i++)parts.push({x:e.x,y:e.y-11,vx:(Math.random()-.5)*130,vy:(Math.random()-.5)*130-30,g:260,life:.3,col:i%2?"#ffd166":"#ff5964",sz:1});
+ parts.push({x:e.x,y:e.y-11,vx:0,vy:0,g:0,life:.14,col:"#ffffff",sz:6,ring:true});
+ shake.t=Math.max(shake.t,.05);shake.m=Math.max(shake.m,1.2);
+ addDmgNum(e.x+(Math.random()-.5)*8,e.y-22,shown,e.elite?"#ffd166":"#ffffff");
  alertNear(e.x,e.y,110);
  if(e.hp<=0)kill(e);
  else sfx("hit");
@@ -186,15 +200,23 @@ function kill(e){
   if(player.killPow>=1){player.killPow-=1;addFloat(e.x,e.y-34,"POWER","#e07b39");}
  }
  comboN++;comboT=3;
- if(comboN>=3)addFloat(e.x,e.y-24,"x"+comboN,"#ffd166");
+ if(comboN>=3)addFloat(e.x,e.y-28,"x"+comboN,"#ffd166");
  stampCorpse(e);
- hitStop=Math.max(hitStop,e.boss?.07:.024);
- whiteFlash=Math.max(whiteFlash,e.boss?.14:.05);
+ hitStop=Math.max(hitStop,e.boss?.09:e.type==="chief"?.06:.038);
+ whiteFlash=Math.max(whiteFlash,e.boss?.16:e.elite?.1:.055);
+ shake.t=Math.max(shake.t,e.boss?.5:.12);
+ shake.m=Math.max(shake.m,e.boss?5:e.elite?3.5:2);
  if(e.type==="ceo"){bossDown();return;}
  sfx("die");
- for(let i=0;i<8;i++){
+ // death burst: ring + sparks + smoke
+ parts.push({x:e.x,y:e.y-10,vx:0,vy:0,g:0,life:.3,col:e.elite?"#ffd166":"#ff5964",sz:e.r*1.4,ring:true});
+ for(let i=0;i<14;i++){
+  const a=Math.random()*7,s=50+Math.random()*130;
+  parts.push({x:e.x,y:e.y-10,vx:Math.cos(a)*s,vy:Math.sin(a)*s-30,g:220,life:.45+Math.random()*.3,col:i%3?"#ff5964":"#ffd166",sz:1});
+ }
+ for(let i=0;i<4;i++){
   const a=Math.random()*7;
-  parts.push({x:e.x,y:e.y-8,vx:Math.cos(a)*(30+Math.random()*60),vy:Math.sin(a)*(30+Math.random()*60)-20,g:180,life:.5,col:"#ff5964",sz:1});
+  parts.push({x:e.x,y:e.y-8,vx:Math.cos(a)*25,vy:Math.sin(a)*20-14,g:-10,life:.7,col:"#3a3f4d",sz:3+Math.random()*3,k:"smoke"});
  }
  if(e.type==="chief"){
   pickups.push({kind:"med",x:e.x,y:e.y,t:0});

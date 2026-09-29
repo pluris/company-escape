@@ -87,6 +87,19 @@ function updateEnemy(e,dt){
     if(d>90&&e.pd<=0&&seen){e.pd=2.8;eShoot(e,e.faceAng+(Math.random()-.5)*.06,6,150,"#f2f2f2");}
    }
    break;
+  case"intern":
+   // swarm rusher: fast, erratic, dies in one hit, no ranged threat
+   if(e.st==="windup"){
+    e.stT-=dt;
+    if(e.stT<=0){e.st="idle";e.cool=.7;}
+   }else{
+    const wob=Math.sin(e.t*11)*.5;
+    moveEnt(e,(dx/d*Math.cos(wob)-dy/d*Math.sin(wob))*e.spd*dt,
+     (dy/d*Math.cos(wob)+dx/d*Math.sin(wob))*e.spd*dt,false);
+    e.moving=true;
+    if(d<24&&e.cool<=0){e.st="windup";e.stT=.2;e.tell=.2;e.tellMax=.2;sfx("dash");}
+   }
+   break;
   case"mgr":
   case"clone":
    if(e.tell>0)break;

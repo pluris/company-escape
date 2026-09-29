@@ -196,9 +196,14 @@ function updatePlayerCtl(dt){
   rollPressed=false;
   if(player.rollCd<=0&&player.roll<=0){
    const a=len>0?Math.atan2(iy,ix):player.aim;
-   player.roll=.2;player.rollCd=.7;
+   player.roll=.22;player.rollCd=.55;
    player.rx=Math.cos(a);player.ry=Math.sin(a);
    stats.rolls++;
+   for(let i=0;i<5;i++){
+    const sa=a+Math.PI+(Math.random()-.5)*1.1;
+    parts.push({x:player.x+Math.cos(sa)*6,y:player.y-8+Math.sin(sa)*6,
+     vx:Math.cos(sa)*70,vy:Math.sin(sa)*50-20,g:60,life:.28,col:"#8b91a0",sz:2});
+   }
    sfx("dash");
   }
  }
@@ -244,6 +249,10 @@ function updatePlayerCtl(dt){
  }
 }
 
+function addDmgNum(x,y,v,col){
+ if(dmgNums.length>26)dmgNums.shift();
+ dmgNums.push({x:x,y:y,v:String(v),col:col||"#ffffff",t:.75,vy:-34,vx:(Math.random()-.5)*14});
+}
 function addFloat(x,y,txt,col){floats.push({x:x,y:y,txt:txt,col:col||"#ffffff",t:.9});}
 function perfectDodge(b){
  player.rollCd=Math.max(0,player.rollCd-.45);
@@ -337,6 +346,12 @@ function updatePlay(dt){
  for(let i=flashes.length-1;i>=0;i--){flashes[i].t-=dt;if(flashes[i].t<=0)flashes.splice(i,1);}
  for(let i=beams.length-1;i>=0;i--){beams[i].t-=dt;if(beams[i].t<=0)beams.splice(i,1);}
  for(let i=floats.length-1;i>=0;i--){const f2=floats[i];f2.t-=dt;f2.y-=18*dt;if(f2.t<=0)floats.splice(i,1);}
+ for(let i=dmgNums.length-1;i>=0;i--){
+  const d=dmgNums[i];
+  d.t-=dt;d.y+=d.vy*dt;d.x+=d.vx*dt;d.vy+=70*dt;
+  if(d.t<=0)dmgNums.splice(i,1);
+ }
+ for(const e of enemies)if(e.hitT>0)e.hitT-=dt;
  for(const S of SKILLS){const st=skillState[S.id];if(st&&st.cd>0)st.cd-=dt;}
  caffeineT=Math.max(0,caffeineT-dt);
  comboT-=dt;if(comboT<=0)comboN=0;

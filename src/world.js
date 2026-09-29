@@ -1,12 +1,80 @@
+function drawSurface(g,th,t){
+ // each theme gets a believable floor material instead of a flat checker
+ if(th==="parking"){
+  g.fillStyle=t.f1;g.fillRect(0,0,VW,VH);
+  for(let y=0;y<VH;y+=3){
+   g.fillStyle=(y/3)%2?"rgba(255,255,255,.012)":"rgba(0,0,0,.03)";
+   g.fillRect(0,y,VW,1);
+  }
+  g.fillStyle="rgba(0,0,0,.16)";
+  for(let i=0;i<20;i++){g.beginPath();g.ellipse(srnd()*VW,srnd()*VH,4+srnd()*10,2+srnd()*5,srnd()*3,0,7);g.fill();}
+ }else if(th==="office"||th==="top"||th==="exec"){
+  // carpet tiles with directional weave + seam grid
+  g.fillStyle=t.f1;g.fillRect(0,0,VW,VH);
+  for(let ty=0;ty<MH;ty++)for(let tx=0;tx<MW;tx++){
+   if((tx+ty)%2){
+    g.fillStyle=t.f2;g.fillRect(tx*TS,ty*TS,TS,TS);
+   }
+  }
+  g.strokeStyle="rgba(0,0,0,.14)";g.lineWidth=1;
+  for(let x=0;x<=VW;x+=TS){g.beginPath();g.moveTo(x+.5,0);g.lineTo(x+.5,VH);g.stroke();}
+  for(let y=0;y<=VH;y+=TS){g.beginPath();g.moveTo(0,y+.5);g.lineTo(VW,y+.5);g.stroke();}
+  g.fillStyle="rgba(255,255,255,.022)";
+  for(let y=2;y<VH;y+=4)g.fillRect(0,y,VW,1);
+ }else if(th==="lobby"){
+  // polished marble with veining
+  g.fillStyle=t.f1;g.fillRect(0,0,VW,VH);
+  g.strokeStyle="rgba(0,0,0,.20)";g.lineWidth=1;
+  for(let x=0;x<=VW;x+=64){g.beginPath();g.moveTo(x+.5,0);g.lineTo(x+.5,VH);g.stroke();}
+  for(let y=0;y<=VH;y+=64){g.beginPath();g.moveTo(0,y+.5);g.lineTo(VW,y+.5);g.stroke();}
+  for(let i=0;i<26;i++){
+   g.strokeStyle="rgba(255,255,255,.05)";g.lineWidth=1;
+   g.beginPath();
+   let vx=srnd()*VW,vy=srnd()*VH;
+   g.moveTo(vx,vy);
+   for(let s=0;s<4;s++){vx+=(srnd()-.5)*60;vy+=(srnd()-.5)*40;g.lineTo(vx,vy);}
+   g.stroke();
+  }
+  g.fillStyle="rgba(160,40,48,.30)";
+  g.fillRect(206,0,68,VH);
+  g.fillStyle="rgba(255,209,102,.10)";
+  g.fillRect(206,0,2,VH);g.fillRect(272,0,2,VH);
+ }else if(th==="rnd"){
+  // lab floor: epoxy with grid seams and drain channels
+  g.fillStyle=t.f1;g.fillRect(0,0,VW,VH);
+  g.strokeStyle="rgba(67,232,160,.10)";g.lineWidth=1;
+  for(let x=0;x<=VW;x+=TS*2){g.beginPath();g.moveTo(x+.5,0);g.lineTo(x+.5,VH);g.stroke();}
+  for(let y=0;y<=VH;y+=TS*2){g.beginPath();g.moveTo(0,y+.5);g.lineTo(VW,y+.5);g.stroke();}
+  g.fillStyle="rgba(0,0,0,.22)";
+  for(let x=8;x<VW;x+=TS*4)g.fillRect(x,VH-14,TS*2,8);
+  g.fillStyle="rgba(67,232,160,.06)";g.fillRect(0,VH-12,VW,4);
+ }else if(th==="sec"){
+  // dark server-room floor with cable runs
+  g.fillStyle=t.f1;g.fillRect(0,0,VW,VH);
+  g.fillStyle="rgba(255,71,87,.05)";
+  for(let i=0;i<7;i++)g.fillRect(0,20+i*38,VW,2);
+  g.fillStyle="rgba(0,0,0,.25)";
+  for(let y=0;y<VH;y+=TS){g.fillRect(0,y,VW,1);}
+ }else if(th==="roof"){
+  g.fillStyle=t.f1;g.fillRect(0,0,VW,VH);
+  g.fillStyle="rgba(0,0,0,.18)";
+  for(let x=0;x<VW;x+=TS*3)g.fillRect(x,0,2,VH);
+  for(let y=0;y<VH;y+=TS*3)g.fillRect(0,y,VW,2);
+  g.fillStyle="rgba(255,255,255,.02)";
+  for(let i=0;i<30;i++)g.fillRect(srnd()*VW,srnd()*VH,3+srnd()*8,1);
+ }else{
+  g.fillStyle=t.f1;g.fillRect(0,0,VW,VH);
+  for(let ty=0;ty<MH;ty++)for(let tx=0;tx<MW;tx++)
+   if((tx+ty)%2){g.fillStyle=t.f2;g.fillRect(tx*TS,ty*TS,TS,TS);}
+ }
+}
+
 function prerenderFloor(th,map){
  floorCv=document.createElement("canvas");floorCv.width=VW;floorCv.height=VH;
  floorCtx=floorCv.getContext("2d");
  seedV=999+floorIdx*77;
  const t=THEMES[th];
- for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){
-  const px=x*TS,py=y*TS;
-  floorCtx.fillStyle=((x+y)%2)?t.f1:t.f2;floorCtx.fillRect(px,py,TS,TS);
- }
+ drawSurface(floorCtx,th,t);
  for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){
   const px=x*TS,py=y*TS;
   if(srnd()<.16){floorCtx.fillStyle="rgba(255,255,255,.035)";floorCtx.fillRect(px+Math.floor(srnd()*14),py+Math.floor(srnd()*14),2,1);}
@@ -35,9 +103,16 @@ function prerenderFloor(th,map){
  for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){
   const ch=map[y][x],px=x*TS,py=y*TS;
   if(ch==="#"){
+   // wall block: darker base, lit cap, deep bottom edge
+   const openBelow=map[y+1]&&map[y+1][x]!=="#";
    floorCtx.fillStyle=t.w;floorCtx.fillRect(px,py,TS,TS);
-   floorCtx.fillStyle=t.wt;floorCtx.fillRect(px,py,TS,4);
-   floorCtx.fillStyle="rgba(0,0,0,.25)";floorCtx.fillRect(px,py+TS-2,TS,2);
+   floorCtx.fillStyle=t.wt;floorCtx.fillRect(px,py,TS,3);
+   floorCtx.fillStyle="rgba(255,255,255,.05)";floorCtx.fillRect(px,py+3,TS,1);
+   if(openBelow){
+    floorCtx.fillStyle="rgba(0,0,0,.30)";floorCtx.fillRect(px,py+TS-3,TS,3);
+   }else{
+    floorCtx.fillStyle="rgba(0,0,0,.16)";floorCtx.fillRect(px,py+TS-2,TS,2);
+   }
   }
  }
  for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){

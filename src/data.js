@@ -35,6 +35,7 @@ let skillState={};
 let floats=[];
 let perks=[];
 let hoverPerk=-1;
+let dmgNums=[];
 
 // floor-clear bonus: pick 1 of 3
 const PERKS=[

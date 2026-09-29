@@ -225,7 +225,17 @@ function drawBullets(){
  ctx.globalCompositeOperation="lighter";
  for(const b of bullets){
   const core=b.from==="p"?(b.crit?"#ffd166":"#ffe9a8"):"#ff5964";
-  const img=glow(core,b.crit?11:8);
+  // motion streak behind the round
+  const sp=Math.hypot(b.vx,b.vy)||1;
+  const ux=b.vx/sp,uy=b.vy/sp;
+  const len=Math.min(20,sp*.055);
+  ctx.strokeStyle=hexA(core,.30);
+  ctx.lineWidth=b.size*1.1;
+  ctx.beginPath();
+  ctx.moveTo(b.x-ux*len,b.y-uy*len);
+  ctx.lineTo(b.x,b.y);
+  ctx.stroke();
+  const img=glow(core,b.crit?12:9);
   ctx.drawImage(img,b.x-img.width/2,b.y-img.height/2);
  }
  for(const l of lobs){
@@ -308,31 +318,56 @@ function drawHeli(){
  ctx.restore();
 }
 
+function animFrame(name,phase,moving){
+ const f=SPRF[name];
+ if(!f||!f.length||!moving)return null;
+ return f[(Math.floor(phase)&1)];
+}
+function flashOf(name,img){
+ if(FLASHF[name]&&FLASHF[name].length)return null;
+ return FLASH[name]||null;
+}
 function drawEntity(e){
  const isClone=e.type==="clone";
- const spr=isClone?SPR.exec:spriteOf(e);
- const fl=isClone?FLASH.exec:FLASH[spr===SPR.exec&&isClone?"exec":spriteNameOf(e)];
- const s=e.type==="chief"?1.18:e.type==="ceo"?1.35:1;
+ const nm=isClone?"clone":spriteNameOf(e);
+ const spr=SPR[nm]||SPR.guard;
+ const s=e.type==="chief"?1.1:e.type==="ceo"?1.2:1;
+ const fl=FLASH[nm]||FLASH.guard;
  ctx.save();
  if(isClone)ctx.globalAlpha=e.alpha;
- ctx.fillStyle="rgba(0,0,0,.32)";
- ctx.beginPath();ctx.ellipse(e.x,e.y,e.r*s*CHS,4,0,0,7);ctx.fill();
- if(e.type==="ceo"&&e.alert){
-  const g=ctx.createRadialGradient(e.x,e.y-12,2,e.x,e.y-12,30);
-  g.addColorStop(0,"rgba(255,209,102,"+(0.10+0.05*Math.sin(tGlobal*5))+")");
+ ctx.fillStyle="rgba(0,0,0,.34)";
+ ctx.beginPath();ctx.ellipse(e.x,e.y+1,e.r*s*1.1,4,0,0,7);ctx.fill();
+ if(e.elite){
+  const pl=.5+.5*Math.sin(tGlobal*5+e.id);
+  const g=ctx.createRadialGradient(e.x,e.y-14,2,e.x,e.y-14,26);
+  g.addColorStop(0,"rgba(255,209,102,"+(0.14+0.08*pl)+")");
   g.addColorStop(1,"rgba(255,209,102,0)");
-  ctx.fillStyle=g;ctx.fillRect(e.x-30,e.y-40,60,60);
+  ctx.fillStyle=g;ctx.fillRect(e.x-26,e.y-40,52,52);
  }
+ if(e.type==="ceo"&&e.alert){
+  const g=ctx.createRadialGradient(e.x,e.y-18,2,e.x,e.y-18,38);
+  g.addColorStop(0,"rgba(255,209,102,"+(0.12+0.06*Math.sin(tGlobal*5))+")");
+  g.addColorStop(1,"rgba(255,209,102,0)");
+  ctx.fillStyle=g;ctx.fillRect(e.x-38,e.y-56,76,76);
+ }
+ const af=animFrame(nm,(e.t*7),e.moving);
+ const img=af||spr;
  ctx.translate(e.x,e.y);
- ctx.scale(e.face*s*CHS,s*CHS);
- const bobY=e.moving?Math.abs(Math.sin(e.bob||e.t*9))*1.5:0;
- ctx.drawImage(spr,-spr.width/2,-spr.height+2+bobY);
+ // squash-and-stretch on hit
+ const ht=e.hitT>0?(e.hitT/.12):0;
+ const sx2=1+ht*.22,sy2=1-ht*.18;
+ ctx.scale(e.face*s*CHS*sx2,s*CHS*sy2);
+ const bobY=e.moving?Math.abs(Math.sin(e.bob||e.t*9))*1.2:0;
+ const lean=e.moving?Math.sin(e.t*7)*0.02:0;
+ if(lean)ctx.rotate(lean*e.face);
+ ctx.drawImage(img,-img.width/2,-img.height+2+bobY);
  if(e.flash>0){
-  ctx.globalAlpha=.85;
-  ctx.drawImage(fl,-fl.width/2,-fl.height+2+bobY);
+  ctx.globalAlpha=.9;
+  const afl=af?(FLASHF[nm]&&FLASHF[nm][(Math.floor(e.t*7)&1)]):null;
+  ctx.drawImage(afl||fl,-(afl||fl).width/2,-(afl||fl).height+2+bobY);
   ctx.globalAlpha=isClone?e.alpha:1;
  }
-  ctx.restore();
+ ctx.restore();
   if(e.tell>0&&!e.static){
    const prog=1-e.tell/(e.tellMax||.8);
    if(e.tactic==="brute"){
@@ -368,11 +403,16 @@ function drawEntity(e){
   }
   if(e.elite){
    const pl=.5+.5*Math.sin(tGlobal*5+e.id);
-   ctx.strokeStyle="rgba(255,209,102,"+(.55+.35*pl)+")";
-   ctx.lineWidth=1.5;
+   ctx.strokeStyle="rgba(255,209,102,"+(.6+.35*pl)+")";
+   ctx.lineWidth=1.6;
    ctx.beginPath();
-   ctx.ellipse(e.x,e.y-1,e.r*s*CHS+2.5,5.5,0,0,7);
+   ctx.ellipse(e.x,e.y+1,e.r*s*1.1+3,6,0,0,7);
    ctx.stroke();
+   for(let i=0;i<3;i++){
+    const a=tGlobal*1.5+i*2.1+e.id;
+    ctx.fillStyle="rgba(255,209,102,.8)";
+    ctx.fillRect(e.x+Math.cos(a)*(e.r+6)-1,e.y+1+Math.sin(a)*4-1,2,2);
+   }
   }
   if(!e.static&&isArmed(e)){
   ctx.save();
@@ -427,7 +467,7 @@ function isArmed(e){
 function drawGun(px,py){
  const w=curWpn,a=player.aim;
  ctx.save();
- ctx.translate(px,py-12);ctx.rotate(a);
+ ctx.translate(px,py-17);ctx.rotate(a);
  ctx.translate(-player.recoil,0);
  ctx.scale(CHS,CHS);
  if(w==="case"){
@@ -481,13 +521,16 @@ function drawPlayer(){
  const p=player;
  ctx.save();
  if(p.inv>0&&p.roll<=0)ctx.globalAlpha=.5+.35*Math.sin(tGlobal*30);
- ctx.fillStyle="rgba(0,0,0,.32)";
- ctx.beginPath();ctx.ellipse(p.x,p.y,9,4,0,0,7);ctx.fill();
+ ctx.fillStyle="rgba(0,0,0,.34)";
+ ctx.beginPath();ctx.ellipse(p.x,p.y+1,9,4,0,0,7);ctx.fill();
+ const af=animFrame("player",p.bob*0.55,p.moving);
+ const img=af||SPR.player;
  ctx.translate(p.x,p.y);
- if(p.roll>0)ctx.scale(1,.82);
+ if(p.roll>0)ctx.scale(1.1,.8);
  ctx.scale(p.face*CHS,CHS);
- const bobY=p.moving?Math.abs(Math.sin(p.bob))*1.5:0;
- ctx.drawImage(SPR.player,-SPR.player.width/2,-SPR.player.height+2+bobY);
+ const bobY=p.moving?Math.abs(Math.sin(p.bob))*1.2:0;
+ if(p.moving)ctx.rotate(Math.sin(p.bob*0.5)*0.02*p.face);
+ ctx.drawImage(img,-img.width/2,-img.height+2+bobY);
  ctx.restore();
  drawGun(p.x,p.y);
 }
@@ -496,7 +539,14 @@ function drawWorld(){
  const sm=shake.m*shakeM;
  const sx=shake.t>0?(Math.random()-.5)*sm*2:0;
  const sy=shake.t>0?(Math.random()-.5)*sm*2:0;
+ // subtle zoom punch on impact decays back to 1
+ const zoom=1+Math.min(0.035,sm*.008)+Math.max(0,(shake.t-.1)*.05);
  ctx.save();
+ if(zoom!==1){
+  ctx.translate(VW/2,VH/2);
+  ctx.scale(zoom,zoom);
+  ctx.translate(-VW/2,-VH/2);
+ }
  ctx.translate(Math.round(sx),Math.round(sy));
  if(floorCv)ctx.drawImage(floorCv,0,0);
  drawGlass();drawVends();drawElevator();drawPickups();
@@ -514,6 +564,18 @@ function drawWorld(){
   for(const f2 of floats){
    ctx.globalAlpha=Math.min(1,f2.t*2);
    txt(f2.txt,f2.x,f2.y,8,f2.col,"center",true);
+   ctx.globalAlpha=1;
+  }
+  for(const d of dmgNums){
+   const a=Math.min(1,d.t*2.4);
+   ctx.globalAlpha=a;
+   ctx.font="bold 7px monospace";
+   ctx.textAlign="center";
+   ctx.fillStyle="rgba(0,0,0,.6)";
+   ctx.fillText(d.v,d.x+1,d.y+1);
+   ctx.fillStyle=d.col;
+   ctx.fillText(d.v,d.x,d.y);
+   ctx.textAlign="left";
    ctx.globalAlpha=1;
   }
   ctx.restore();
